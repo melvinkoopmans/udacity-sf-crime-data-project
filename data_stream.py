@@ -37,7 +37,7 @@ def run_spark_job(spark):
         .option("kafka.bootstrap.servers", "localhost:9092") \
         .option("subscribe", "sf-police-department-calls-for-service") \
         .option("startingOffsets", "earliest") \
-        .option("maxOffsetsPerTrigger", 200) \
+        .option("maxOffsetsPerTrigger", 800000) \
         .load()
 
     # Show schema for the incoming resources for checks
@@ -106,6 +106,7 @@ if __name__ == "__main__":
         .master("local[*]") \
         .appName("KafkaSparkStructuredStreaming") \
         .config("spark.ui.port", 3000) \
+        .config("spark.default.parallelism", 1*16) \
         .getOrCreate()
 
     logger.info("Spark started")
