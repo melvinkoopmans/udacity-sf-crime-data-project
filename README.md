@@ -39,7 +39,7 @@ If we reduce the amount of threads from 16 to 1 (`local[1]`) the throughput will
 
 ### What were the 2-3 most efficient SparkSession property key/value pairs? Through testing multiple variations on values, how can you tell these were the most optimal?
 
-I tried variations of the `maxOffsetsPerTrigger` variable. As discussed in the previous question, 10.000 offsets per trigger results in 1560 rows processed per second. Increasing the offsets to 15.000 increased amount of processed rows to 2371 / second. Increasing it to 25.000 increases it to ~3496 / second. I went all the way up to 800000, achieving a processing speed of 45266 rows / second.
+I tried variations of the `maxOffsetsPerTrigger` variable. As discussed in the previous question, 10.000 offsets per trigger results in 1560 rows processed per second. Increasing the offsets to 15.000 increased amount of processed rows to 2371 / second. Increasing it to 25.000 increases it to ~3496 / second. I went all the way up to 800000, achieving a processing speed of 43426 rows / second.
 
 I kept the master at `local[*]` to utilize all my 16 threads and achieve maximum parallelism. I also tried tuning the `spark.default.parallelism` parameter to increase the number of partitions in RDDs returned by transformations like `join`, `reduceByKey` and `parallelize`. In local mode this parameters defaults to the number of cores on the local machine. I tried to use two partitions per core, but that decreased performance slightly. Using 16 in total was the optimal variable.
 
@@ -47,5 +47,7 @@ On my local machine, I ended up with:
 `maxOffsetsPerTrigger`: `800.000`
 `master`: `local[*]`
 `spark.default.parallelism`: `16`
-to process 45266 rows / second.
+to process 43426 rows / second as can be seen in the following image:
+
+![Batch 43426 rows / second](/images/report_800000.png)
 
