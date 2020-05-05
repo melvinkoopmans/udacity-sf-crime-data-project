@@ -5,20 +5,25 @@ from pyspark.sql.types import *
 import pyspark.sql.functions as psf
 
 schema = StructType([
-    StructField("crime_id", StringType()),
-    StructField("original_crime_type_name", StringType()),
-    StructField("report_data", TimestampType()),
-    StructField("call_date", TimestampType()),
-    StructField("offense_data", TimestampType()),
-    StructField("call_time", StringType()),
-    StructField("call_date_time", TimestampType()),
-    StructField("disposition", StringType()),
-    StructField("address", StringType()),
-    StructField("city", StringType()),
-    StructField("state", StringType()),
-    StructField("agency_id", StringType()),
-    StructField("address_type", StringType()),
-    StructField("common_location", StringType()),
+    StructField("crime_id", StringType(), True),
+    StructField("original_crime_type_name", StringType(), True),
+    StructField("report_data", TimestampType(), True),
+    StructField("call_date", TimestampType(), True),
+    StructField("offense_data", TimestampType(), True),
+    StructField("call_time", StringType(), True),
+    StructField("call_date_time", TimestampType(), True),
+    StructField("disposition", StringType(), True),
+    StructField("address", StringType(), True),
+    StructField("city", StringType(), True),
+    StructField("state", StringType(), True),
+    StructField("agency_id", StringType(), True),
+    StructField("address_type", StringType(), True),
+    StructField("common_location", StringType(), True),
+])
+
+radio_code_schema = StructType([
+    StructField("disposition_code", StringType()),
+    StructField("description", StringType()),
 ])
 
 def run_spark_job(spark):
@@ -40,17 +45,22 @@ def run_spark_job(spark):
 
     # TODO extract the correct column from the kafka input resources
     # Take only value and convert it to String
-    kafka_df = df.selectExpr("CAST(key AS STRING)", "CAST(value AS STRING)")
+    kafka_df = df.selectExpr("CAST(value AS STRING)")
 
     service_table = kafka_df \
         .select(psf.from_json(psf.col('value'), schema).alias("DF")) \
         .select("DF.*")
 
     # TODO select original_crime_type_name and disposition
-    distinct_table = service_table.dropDuplicates(["original_crime_type_name", "disposition"])
+    distinct_table = service_table \
+        .select(psf.to_timestamp(service_table["call_date_time"]).alias("call_date_time"), "original_crime_type_name", "disposition") \
+        .withWatermark("call_date_time", "10 minutes") \
+        .distinct()
 
     # count the number of original crime type
-    agg_df = distinct_table.groupBy('original_crime_type_name').count()
+    agg_df = distinct_table \
+        .groupby(psf.window("call_date_time", "60 minutes"), "original_crime_type_name") \
+        .count()
 
     # TODO Q1. Submit a screen shot of a batch ingestion of the aggregation
     # TODO write output stream
@@ -58,14 +68,17 @@ def run_spark_job(spark):
         .writeStream \
         .format("console") \
         .outputMode("complete") \
+        .option("truncate", False) \
         .start()
 
     # TODO attach a ProgressReporter
     query.awaitTermination()
 
     # TODO get the right radio code json path
-    radio_code_json_filepath = ""
-    radio_code_df = spark.read.json(radio_code_json_filepath)
+    radio_code_json_filepath = "radio_code.json"
+    radio_code_df = spark.read.json(radio_code_json_filepath, schema=radio_code_schema, multiLine=True)
+
+    radio_code_df.printSchema()
 
     # clean up your data so that the column names match on radio_code_df and agg_df
     # we will want to join on the disposition code
@@ -74,10 +87,14 @@ def run_spark_job(spark):
     radio_code_df = radio_code_df.withColumnRenamed("disposition_code", "disposition")
 
     # TODO join on disposition column
-    # join_query = agg_df.
+    join_query = agg_df.join(radio_code_df, agg_df["disposition"] == radio_code_df["disposition"], "left")
 
-
-    join_query.awaitTermination()
+    join_query \
+        .format("console") \
+        .outputMode("complete") \
+        .option("truncate", False) \
+        .start() \
+        .awaitTermination()
 
 
 if __name__ == "__main__":
